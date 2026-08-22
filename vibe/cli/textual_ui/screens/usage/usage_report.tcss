@@ -1,0 +1,182 @@
+/* Brand colour is redeclared per file, never inlined. */
+$mistral_orange: #FF8205;
+
+/* Inline block in the chat stream, framed like the other inline apps. Background stays
+   transparent so the terminal shows through. */
+UsageReport {
+    width: 100%;
+    height: auto;
+    background: transparent;
+    border: solid $foreground-muted;
+    padding: 0 1;
+    margin: 1 0;
+}
+
+.usage-header {
+    height: 1;
+    width: 100%;
+}
+
+.usage-title {
+    width: auto;
+}
+
+.usage-spacer {
+    width: 1fr;
+}
+
+.usage-total {
+    width: auto;
+}
+
+.usage-path {
+    height: 1;
+    width: 100%;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+    color: $text-muted;
+
+    &:ansi {
+        text-style: dim;
+    }
+}
+
+.period-row {
+    height: 1;
+    width: 100%;
+    margin: 1 0;
+}
+
+.period-tab {
+    width: auto;
+    height: 1;
+}
+
+.period-tab:hover {
+    background: $boost;
+}
+
+/* The selected period reads as a filled pill, not a recoloured word. */
+.period-tab--active {
+    background: $boost;
+    text-style: bold;
+}
+
+.period-sep {
+    width: auto;
+    height: 1;
+}
+
+.usage-hint {
+    height: 1;
+    margin-top: 1;
+    color: $text-muted;
+
+    &:ansi {
+        text-style: dim;
+    }
+}
+
+#chart-x-tail {
+    height: 1;
+}
+
+.usage-section {
+    height: 1;
+    margin-top: 1;
+    color: $text-muted;
+
+    &:ansi {
+        text-style: dim;
+    }
+}
+
+/* -- chart ---------------------------------------------------------------- */
+
+.chart-row {
+    /* Height is set from the widget. */
+    width: 100%;
+}
+
+.chart-axis {
+    width: auto;
+    height: 100%;
+    margin-right: 1;
+    color: $text-muted;
+
+    &:ansi {
+        text-style: dim;
+    }
+}
+
+.chart-plot {
+    width: 1fr;
+    height: 100%;
+}
+
+/* Labels are placed by flexible spacers rather than by counting characters, which is
+   what previously pushed the last date onto a clipped second line. */
+.chart-xaxis {
+    height: 1;
+    width: 100%;
+}
+
+#chart-xaxis-gutter {
+    height: 1;
+}
+
+.chart-x-label {
+    width: auto;
+    height: 1;
+    text-wrap: nowrap;
+}
+
+.usage-note {
+    height: auto;
+    margin-top: 1;
+    color: $text-muted;
+
+    &:ansi {
+        text-style: dim;
+    }
+}
+
+.usage-empty {
+    height: 1;
+    color: $text-muted;
+
+    &:ansi {
+        text-style: dim;
+    }
+}
+
+/* -- lists ---------------------------------------------------------------- */
+
+.model-row {
+    height: 1;
+    width: 100%;
+}
+
+.model-name {
+    width: auto;
+}
+
+.model-cost {
+    width: auto;
+}
+
+.model-meta {
+    height: 1;
+    margin-bottom: 1;
+    padding-left: 2;
+    color: $text-muted;
+
+    &:ansi {
+        text-style: dim;
+    }
+}
+
+.session-row {
+    height: 1;
+    padding-left: 2;
+}

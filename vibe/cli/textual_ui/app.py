@@ -190,6 +190,7 @@ from vibe.cli.textual_ui.widgets.model_picker import ModelOption, ModelPickerApp
 from vibe.cli.textual_ui.widgets.narrator_status import NarratorStatus
 from vibe.cli.textual_ui.widgets.no_markup_static import NoMarkupStatic
 from vibe.cli.textual_ui.widgets.path_display import PathDisplay
+from vibe.cli.textual_ui.screens.usage import UsageReport
 from vibe.cli.textual_ui.widgets.project_picker import ProjectPickerApp
 from vibe.cli.textual_ui.widgets.proxy_setup_app import ProxySetupApp
 from vibe.cli.textual_ui.widgets.question_app import QuestionApp
@@ -357,6 +358,7 @@ class BottomApp(StrEnum):
     VibeCodeProjectCreate = auto()
     SessionPicker = auto()
     ProjectPicker = auto()
+    UsageReport = auto()
     Voice = auto()
 
 
@@ -3444,6 +3446,11 @@ class VibeApp(App):  # noqa: PLR0904
         await self._switch_to_input_app()
         await self._render_project_usage(message.cwd)
 
+    async def on_usage_report_cancelled(
+        self, message: UsageReport.Cancelled
+    ) -> None:
+        await self._switch_to_input_app()
+
     async def on_project_picker_app_cancelled(
         self, message: ProjectPickerApp.Cancelled
     ) -> None:
@@ -3463,24 +3470,7 @@ class VibeApp(App):  # noqa: PLR0904
             )
             return
 
-        total_prompt = sum(r.prompt_tokens for r in requests)
-        total_cached = sum(r.cached_tokens for r in requests)
-        total_output = sum(r.completion_tokens for r in requests)
-        total_cost = sum(r.cost for r in requests)
-
-        models = sorted({r.model for r in requests})
-        model_label = ", ".join(models)
-
-        text = (
-            f"## Project Usage: `{cwd}`\n\n"
-            f"_Model(s): {model_label}_\n\n"
-            f"**Total cost: ${total_cost:.4f}**\n\n"
-            f"- Requests: {len(requests)}\n"
-            f"- Prompt tokens: {total_prompt:,}"
-            f" ({total_cached:,} cached)\n"
-            f"- Output tokens: {total_output:,}"
-        )
-        await self._mount_and_scroll(UserCommandMessage(text))
+        await self._switch_from_input(UsageReport(cwd=cwd, requests=requests))
 
     async def _rename_session(self, cmd_args: str = "", **kwargs: Any) -> None:
         title = cmd_args.strip()

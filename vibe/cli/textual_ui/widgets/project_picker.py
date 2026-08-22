@@ -12,6 +12,7 @@ from textual.widgets import OptionList
 from textual.widgets.option_list import Option
 
 from vibe.cli.textual_ui.shortcut_hints import shortcut, shortcut_hint
+from vibe.cli.textual_ui.widgets.banner.petit_chat import PetitChat
 from vibe.cli.textual_ui.widgets.navigable_option_list import NavigableOptionList
 from vibe.cli.textual_ui.widgets.no_markup_static import NoMarkupStatic
 
@@ -42,17 +43,31 @@ class ProjectPickerApp(Container):
         def __init__(self) -> None:
             super().__init__()
 
-    def __init__(self, projects: list[tuple[str, int]], **kwargs: Any) -> None:
+    def __init__(
+        self,
+        projects: list[tuple[str, int]],
+        animate_mascot: bool = True,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(id="projectpicker-app", **kwargs)
         self._projects = projects
+        self._animate_mascot = animate_mascot
 
     def compose(self) -> ComposeResult:
         options = [
             Option(_build_option_text(cwd, count), id=cwd)
             for cwd, count in self._projects
         ]
+        count = len(self._projects)
         with Vertical(id="projectpicker-content"):
+            yield PetitChat(
+                animate=self._animate_mascot, classes="projectpicker-mascot"
+            )
             yield NoMarkupStatic("Select Project", classes="projectpicker-title")
+            yield NoMarkupStatic(
+                f"{count} project{'s' if count != 1 else ''}",
+                classes="projectpicker-count",
+            )
             yield NavigableOptionList(*options, id="projectpicker-options")
             yield NoMarkupStatic(
                 shortcut_hint(
