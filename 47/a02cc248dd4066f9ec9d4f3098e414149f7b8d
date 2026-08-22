@@ -1,0 +1,20 @@
+scripts/seed_demo_usage.py
+  h_4314c622e2d856 95-101,114
+vibe/core/agent_loop/_loop.py
+  h_4314c622e2d856 196,2662-2671,2766-2773
+vibe/core/session/usage.py
+  h_4314c622e2d856 143-157
+vibe/core/types.py
+  h_4314c622e2d856 345,382,456
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "47a02cc248dd4066f9ec9d4f3098e414149f7b8d",
+  "prompts": {},
+  "humans": {
+    "h_4314c622e2d856": {
+      "author": "Guillaume Gay <guillaume.gay@protonmail.com>"
+    }
+  }
+}
