@@ -46,7 +46,6 @@ def _make_meta(
     child_sessions: list[dict] | None = None,
     parent_session_id: str | None = None,
 ) -> dict:
-    model = next(m for m in MODELS if m["alias"] == model_alias)
     return {
         "session_id": session_id,
         "parent_session_id": parent_session_id,
@@ -93,6 +92,13 @@ def _make_assistant_message(
     completion_tokens: int,
     cached_tokens: int,
 ) -> dict:
+    model_cfg = next(m for m in MODELS if m["alias"] == model)
+    cached = min(cached_tokens, prompt_tokens)
+    cost = (
+        (prompt_tokens - cached) * model_cfg["input_price"]
+        + cached * model_cfg["cached_price"]
+        + completion_tokens * model_cfg["output_price"]
+    ) / 1_000_000
     return {
         "role": "assistant",
         "content": "Here is the response.",
@@ -105,6 +111,7 @@ def _make_assistant_message(
         },
         "model": model,
         "timestamp": timestamp,
+        "cost": round(cost, 6),
     }
 
 
