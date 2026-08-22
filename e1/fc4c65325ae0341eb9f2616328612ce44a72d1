@@ -1,0 +1,14 @@
+vibe/core/session/usage.py
+  h_4314c622e2d856 167,175-178,183,197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "e1fc4c65325ae0341eb9f2616328612ce44a72d1",
+  "prompts": {},
+  "humans": {
+    "h_4314c622e2d856": {
+      "author": "Guillaume Gay <guillaume.gay@protonmail.com>"
+    }
+  }
+}
