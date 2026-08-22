@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Seed a demo project with ~45 days of fake sessions for /projects UI development.
+"""Seed demo projects with fake sessions for /projects UI development.
 
 Run: uv run python scripts/seed_demo_usage.py
 
-Creates sessions under ~/.vibe/logs/session/ for a fake project
-"seeded-project" with realistic assistant messages carrying usage/model/timestamp.
-After running, /projects will show "seeded-project" with real-looking data.
+Creates sessions under ~/.vibe/logs/session/ for demo projects with
+realistic assistant messages carrying usage/model/timestamp.
+After running, /projects will show the projects with real-looking data.
 
 All data is fake and anonymized — safe to push to public repos.
 """
@@ -20,10 +20,9 @@ from uuid import uuid4
 
 from vibe.core.paths._vibe_home import SESSION_LOG_DIR
 
-DEMO_CWD = "/tmp/seeded-project"
 SESSION_PREFIX = "session"
-DAYS = 45
 SEED = 42
+SUBAGENT_CHANCE = 0.2
 
 MODELS = [
     {"alias": "glm-5-2", "input_price": 1.4, "output_price": 4.4, "cached_price": 0.14},
@@ -33,6 +32,12 @@ MODELS = [
         "output_price": 7.5,
         "cached_price": 0.15,
     },
+]
+
+PROJECTS = [
+    {"cwd": "/tmp/seeded-project", "days": 45},
+    {"cwd": "/tmp/coca-cola", "days": 30},
+    {"cwd": "/tmp/nike", "days": 60},
 ]
 
 
@@ -255,17 +260,18 @@ def _write_child_session(
             f.write(json.dumps(msg) + "\n")
 
 
-def main() -> None:
-    rng = random.Random(SEED)
-    save_dir = SESSION_LOG_DIR.path
-    save_dir.mkdir(parents=True, exist_ok=True)
+def _seed_project(  # noqa: PLR0914
+    rng: random.Random, save_dir: Path, cwd: str, days: int, now: datetime
+) -> tuple[int, int, int]:
+    """Seed one project with fake sessions over `days` days.
 
-    now = datetime(2026, 8, 22, 18, 0, tzinfo=UTC)
+    Returns (sessions, subagents, requests) counts.
+    """
     total_sessions = 0
     total_subagents = 0
     total_requests = 0
 
-    for day_offset in range(DAYS):
+    for day_offset in range(days):
         day = now - timedelta(days=day_offset)
 
         # 0-3 sessions per day, weighted toward 1-2
@@ -286,8 +292,10 @@ def main() -> None:
             total_requests += num_requests
 
             # ~20% chance of spawning a subagent
-            has_subagent = rng.random() < 0.2
+            has_subagent = rng.random() < SUBAGENT_CHANCE
             child_links: list[dict] = []
+            child_id = ""
+            child_start = start
             if has_subagent:
                 child_id = str(uuid4())
                 child_start = start + timedelta(minutes=rng.randint(2, 10))
@@ -305,7 +313,7 @@ def main() -> None:
                 save_dir,
                 session_id,
                 start,
-                DEMO_CWD,
+                cwd,
                 model,
                 requests,
                 child_sessions=child_links,
@@ -320,19 +328,33 @@ def main() -> None:
                     parent_dir,
                     child_id,
                     child_start,
-                    DEMO_CWD,
+                    cwd,
                     child_model,
                     child_requests,
                     session_id,
                 )
                 total_subagents += 1
 
-    print(
-        f"Seeded {total_sessions} sessions (+{total_subagents} subagents) "
-        f"with {total_requests} requests over {DAYS} days"
-    )
-    print(f"Project: {DEMO_CWD}")
-    print(f"Sessions written to: {save_dir}")
+    return total_sessions, total_subagents, total_requests
+
+
+def main() -> None:
+    rng = random.Random(SEED)
+    save_dir = SESSION_LOG_DIR.path
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    now = datetime(2026, 8, 22, 18, 0, tzinfo=UTC)
+
+    for project in PROJECTS:
+        cwd = project["cwd"]
+        days = project["days"]
+        sessions, subagents, requests = _seed_project(rng, save_dir, cwd, days, now)
+        print(
+            f"  {cwd}: {sessions} sessions (+{subagents} subagents) "
+            f"with {requests} requests over {days} days"
+        )
+
+    print(f"\nSessions written to: {save_dir}")
     print("Run /projects in vibe to see the demo data.")
 
 
