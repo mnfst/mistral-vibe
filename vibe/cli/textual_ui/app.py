@@ -358,6 +358,7 @@ class BottomApp(StrEnum):
     VibeCodeProjectCreate = auto()
     SessionPicker = auto()
     ProjectPicker = auto()
+    UsageReport = auto()
     Voice = auto()
 
 
