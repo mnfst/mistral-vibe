@@ -15,7 +15,16 @@ from vibe.utils.io import read_safe
 from vibe.utils.pricing import session_token_cost
 from vibe.utils.session_id import shorten_session_id
 
-__all__ = ["ProjectInfo", "RequestUsage", "aggregate_project_usage", "list_projects"]
+__all__ = [
+    "ProjectInfo",
+    "RequestUsage",
+    "aggregate_project_usage",
+    "list_projects",
+    "model_pricing_map",
+]
+
+# (input_price, output_price, cached_input_price) per million tokens, keyed by alias.
+PricingMap = dict[str, tuple[float, float, float | None]]
 
 
 @dataclass(frozen=True)
@@ -62,51 +71,44 @@ def _extract_model_alias(metadata: dict[str, Any]) -> str | None:
     return None
 
 
-def _extract_pricing(metadata: dict[str, Any]) -> tuple[float, float, float | None]:
-    """Extract (input_price, output_price, cached_input_price) from meta.json stats."""
-    stats = metadata.get("stats")
-    if not isinstance(stats, dict):
-        return 0.0, 0.0, None
-    return (
-        stats.get("input_price_per_million", 0.0),
-        stats.get("output_price_per_million", 0.0),
-        stats.get("cached_input_price_per_million"),
-    )
+def model_pricing_map() -> PricingMap:
+    """Build a model-alias → pricing map from the live config.
 
-
-def _lookup_model_pricing(
-    metadata: dict[str, Any], model_alias: str | None
-) -> tuple[float, float, float | None]:
-    """Look up pricing for a model from the config snapshot in meta.json.
-
-    Falls back to the session-level stats pricing if the model is not found
-    or no alias is provided.
+    Single source of truth: reads the current ``config.toml`` plus built-in
+    default models via the standard config orchestrator.
     """
-    default_pricing = _extract_pricing(metadata)
-    if model_alias is None:
-        return default_pricing
+    import asyncio
 
-    config = metadata.get("config")
-    if not isinstance(config, dict):
-        return default_pricing
+    from vibe.core.config.default_orchestrator import build_default_orchestrator
 
-    models = config.get("models")
-    if not isinstance(models, dict):
-        return default_pricing
+    async def _build() -> PricingMap:
+        orchestrator = await build_default_orchestrator(require_api_key=False)
+        return {
+            alias: (model.input_price, model.output_price, model.cached_input_price)
+            for alias, model in orchestrator.config.models.items()
+        }
 
-    model_entry = models.get(model_alias)
-    if not isinstance(model_entry, dict):
-        return default_pricing
+    try:
+        return asyncio.run(_build())
+    except Exception:
+        return {}
 
-    return (
-        model_entry.get("input_price", default_pricing[0]),
-        model_entry.get("output_price", default_pricing[1]),
-        model_entry.get("cached_input_price", default_pricing[2]),
-    )
+
+def _lookup_pricing(
+    pricing_map: PricingMap, model_alias: str | None
+) -> tuple[float, float, float | None]:
+    """Look up pricing for a model alias from the live config pricing map."""
+    if model_alias and model_alias in pricing_map:
+        return pricing_map[model_alias]
+    return 0.0, 0.0, None
 
 
 def _parse_assistant_usage(
-    session_dir: Path, session_id: str, start_time: str | None, metadata: dict[str, Any]
+    session_dir: Path,
+    session_id: str,
+    start_time: str | None,
+    metadata: dict[str, Any],
+    pricing_map: PricingMap,
 ) -> list[RequestUsage]:
     """Parse messages.jsonl and extract per-request usage from assistant messages.
 
@@ -135,8 +137,8 @@ def _parse_assistant_usage(
             continue
 
         model_alias = msg.get("model") or _extract_model_alias(metadata)
-        input_price, output_price, cached_price = _lookup_model_pricing(
-            metadata, model_alias
+        input_price, output_price, cached_price = _lookup_pricing(
+            pricing_map, model_alias
         )
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
@@ -223,7 +225,9 @@ def _find_child_session_dirs(session_dir: Path) -> list[Path]:
     ]
 
 
-def _collect_session_requests(session_dir: Path) -> list[RequestUsage]:
+def _collect_session_requests(
+    session_dir: Path, pricing_map: PricingMap
+) -> list[RequestUsage]:
     """Collect per-request usage for a session directory, including child sessions."""
     metadata = _load_raw_metadata(session_dir)
     if metadata is None:
@@ -232,7 +236,9 @@ def _collect_session_requests(session_dir: Path) -> list[RequestUsage]:
     session_id = metadata.get("session_id", session_dir.name)
     start_time = metadata.get("start_time")
 
-    requests = _parse_assistant_usage(session_dir, session_id, start_time, metadata)
+    requests = _parse_assistant_usage(
+        session_dir, session_id, start_time, metadata, pricing_map
+    )
 
     for child_dir in _find_child_session_dirs(session_dir):
         child_metadata = _load_raw_metadata(child_dir)
@@ -241,7 +247,9 @@ def _collect_session_requests(session_dir: Path) -> list[RequestUsage]:
         child_id = child_metadata.get("session_id", child_dir.name)
         child_start = child_metadata.get("start_time")
         requests.extend(
-            _parse_assistant_usage(child_dir, child_id, child_start, child_metadata)
+            _parse_assistant_usage(
+                child_dir, child_id, child_start, child_metadata, pricing_map
+            )
         )
 
     return requests
@@ -274,8 +282,10 @@ def aggregate_project_usage(
     """Aggregate per-request usage for all sessions belonging to a project (cwd).
 
     Includes child sessions (subagents) under each session's agents/ directory.
+    Pricing is resolved from the live config (config.toml + built-in defaults).
     Returns requests sorted by datetime (oldest first).
     """
+    pricing_map = model_pricing_map()
     index = SessionIndex(save_dir, session_prefix)
     project_sessions = index.list(cwd=cwd)
 
@@ -285,7 +295,7 @@ def aggregate_project_usage(
         short_id = shorten_session_id(session_id)
         session_dirs = list(save_dir.glob(f"{session_prefix}_*_{short_id}"))
         for session_dir in session_dirs:
-            results.extend(_collect_session_requests(session_dir))
+            results.extend(_collect_session_requests(session_dir, pricing_map))
 
     results.sort(key=lambda r: r.datetime or "")
     return results
