@@ -56,8 +56,28 @@ UsageReport {
     background: $boost;
 }
 
+/* The selected period reads as a filled pill, not a recoloured word. */
+.period-tab--active {
+    background: $boost;
+    text-style: bold;
+}
+
 .period-sep {
     width: auto;
+    height: 1;
+}
+
+.usage-hint {
+    height: 1;
+    margin-top: 1;
+    color: $text-muted;
+
+    &:ansi {
+        text-style: dim;
+    }
+}
+
+#chart-x-tail {
     height: 1;
 }
 

@@ -3445,6 +3445,11 @@ class VibeApp(App):  # noqa: PLR0904
         await self._switch_to_input_app()
         await self._render_project_usage(message.cwd)
 
+    async def on_usage_report_cancelled(
+        self, message: UsageReport.Cancelled
+    ) -> None:
+        await self._switch_to_input_app()
+
     async def on_project_picker_app_cancelled(
         self, message: ProjectPickerApp.Cancelled
     ) -> None:
@@ -3464,7 +3469,7 @@ class VibeApp(App):  # noqa: PLR0904
             )
             return
 
-        await self._mount_and_scroll(UsageReport(cwd=cwd, requests=requests))
+        await self._switch_from_input(UsageReport(cwd=cwd, requests=requests))
 
     async def _rename_session(self, cmd_args: str = "", **kwargs: Any) -> None:
         title = cmd_args.strip()

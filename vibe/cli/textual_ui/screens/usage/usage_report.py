@@ -12,10 +12,12 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from textual.app import ComposeResult
+from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
+from textual.message import Message
 from textual.content import Content
 from textual.widgets import Static
 
@@ -24,6 +26,7 @@ from vibe.cli.textual_ui.constants import MistralColors
 from vibe.cli.textual_ui.screens.usage.chart import (
     Series,
     axis_labels,
+    chart_width,
     colour_for,
     render_chart,
 )
@@ -56,12 +59,14 @@ class PeriodTab(Static):
     """One clickable period label."""
 
     def __init__(self, period: Period, active: bool) -> None:
+        label = f" {period.value} "
         markup = (
-            f"[b {MistralColors.ORANGE}]{period.value}[/]"
+            f"[b {MistralColors.ORANGE}]{label}[/]"
             if active
-            else f"[$text-muted]{period.value}[/]"
+            else f"[$text-muted]{label}[/]"
         )
-        super().__init__(Content.from_markup(markup), classes="period-tab")
+        classes = "period-tab period-tab--active" if active else "period-tab"
+        super().__init__(Content.from_markup(markup), classes=classes)
         self.period = period
 
     def on_click(self) -> None:
@@ -76,6 +81,16 @@ class UsageReport(Vertical):
     """The report block. Mounted in the chat stream like any other message."""
 
     DEFAULT_CSS = _STYLES
+    can_focus = True
+
+    class Cancelled(Message):
+        """Escape: hand the bottom of the screen back to the prompt."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("left,h", "previous_period", "Previous period", show=False),
+        Binding("right,l", "next_period", "Next period", show=False),
+        Binding("escape", "release_focus", "Back to prompt", show=False),
+    ]
 
     def __init__(
         self,
@@ -107,6 +122,7 @@ class UsageReport(Vertical):
 
     async def _rerender(self) -> None:
         await self.recompose()
+        self.focus()
         # recompose does not re-fire on_mount, and the chart needs a resolved width.
         self.call_after_refresh(self._draw_chart)
 
@@ -133,11 +149,18 @@ class UsageReport(Vertical):
             Content.from_markup(f"[$text-muted]{self._cwd}[/]"), classes="usage-path"
         )
 
+        yield Static(
+            Content.from_markup(
+                "[$text-muted]←→ period · esc back to prompt[/]"
+            ),
+            classes="usage-hint",
+        )
+
         with Horizontal(classes="period-row"):
             for index, period in enumerate(PERIODS):
                 if index:
                     yield Static(
-                        Content.from_markup("[$text-muted] · [/]"), classes="period-sep"
+                        Content.from_markup("[$text-muted] [/]"), classes="period-sep"
                     )
                 yield PeriodTab(period, period is self._period)
 
@@ -164,6 +187,7 @@ class UsageReport(Vertical):
                 yield Static(id="chart-x-mid", classes="chart-x-label")
                 yield Static("", classes="usage-spacer")
                 yield Static(id="chart-x-last", classes="chart-x-label")
+                yield Static("", id="chart-x-tail")
 
         if usage.undated:
             yield Static(
@@ -241,7 +265,22 @@ class UsageReport(Vertical):
     # -- chart -----------------------------------------------------------------
 
     def on_mount(self) -> None:
+        # Take focus so the arrows work straight away; escape gives it back.
+        self.focus()
         self.call_after_refresh(self._draw_chart)
+
+    def action_previous_period(self) -> None:
+        self._step(-1)
+
+    def action_next_period(self) -> None:
+        self._step(1)
+
+    def _step(self, delta: int) -> None:
+        index = (PERIODS.index(self._period) + delta) % len(PERIODS)
+        self.set_period(PERIODS[index])
+
+    def action_release_focus(self) -> None:
+        self.post_message(self.Cancelled())
 
     def on_resize(self) -> None:
         self._draw_chart()
@@ -254,6 +293,7 @@ class UsageReport(Vertical):
             x_first = self.query_one("#chart-x-first", Static)
             x_mid = self.query_one("#chart-x-mid", Static)
             x_last = self.query_one("#chart-x-last", Static)
+            x_tail = self.query_one("#chart-x-tail", Static)
         except Exception:
             return
 
@@ -268,6 +308,7 @@ class UsageReport(Vertical):
 
         series = [Series(label=name, values=values) for name, values in usage.series()]
         cols = max(CHART_MIN_COLS, plot.size.width)
+        used = chart_width(len(usage.days), cols)
         vmax = max((v for s in series for v in s.values), default=Decimal(0))
 
         labels = axis_labels(vmax, CHART_ROWS)
@@ -282,6 +323,9 @@ class UsageReport(Vertical):
         x_first.update(Content.from_markup(f"[$text-muted]{first}[/]"))
         x_mid.update(Content.from_markup(f"[$text-muted]{middle}[/]"))
         x_last.update(Content.from_markup(f"[$text-muted]{last}[/]"))
+        # The bar grid rarely fills the plot exactly; pad the axis row so the last
+        # label sits under the last bar rather than at the far edge.
+        x_tail.styles.width = max(0, cols - used)
 
 
 def _x_labels(days: list[date]) -> tuple[str, str, str]:
