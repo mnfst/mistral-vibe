@@ -4,23 +4,23 @@
 Run: uv run python scripts/seed_demo_usage.py
 
 Creates sessions under ~/.vibe/logs/session/ for a fake project
-"demo-usage-ui" with realistic assistant messages carrying usage/model/timestamp.
-After running, /projects will show "demo-usage-ui" with real-looking data.
+"seeded-project" with realistic assistant messages carrying usage/model/timestamp.
+After running, /projects will show "seeded-project" with real-looking data.
 
 All data is fake and anonymized — safe to push to public repos.
 """
 
 from __future__ import annotations
 
-import json
-import random
 from datetime import UTC, datetime, timedelta
+import json
 from pathlib import Path
+import random
 from uuid import uuid4
 
 from vibe.core.paths._vibe_home import SESSION_LOG_DIR
 
-DEMO_CWD = "/tmp/demo-usage-ui"
+DEMO_CWD = "/tmp/seeded-project"
 SESSION_PREFIX = "session"
 DAYS = 45
 SEED = 42
