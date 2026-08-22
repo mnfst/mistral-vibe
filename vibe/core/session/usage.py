@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
+import tempfile
 from typing import Any
 
 from vibe.core.session.session_index import (
@@ -103,6 +105,73 @@ def _lookup_pricing(
     return 0.0, 0.0, None
 
 
+def _extract_snapshot_pricing(
+    metadata: dict[str, Any], model_alias: str | None
+) -> tuple[float, float, float | None]:
+    """Extract pricing for a model from the session's meta.json config snapshot.
+
+    Used for backfill so old messages get the price that was in effect when
+    the session ran, not the current live config price.
+    """
+    config = metadata.get("config")
+    if not isinstance(config, dict):
+        return 0.0, 0.0, None
+
+    models = config.get("models")
+    if not isinstance(models, dict) or not model_alias:
+        return 0.0, 0.0, None
+
+    model_entry = models.get(model_alias)
+    if not isinstance(model_entry, dict):
+        return 0.0, 0.0, None
+
+    return (
+        model_entry.get("input_price", 0.0),
+        model_entry.get("output_price", 0.0),
+        model_entry.get("cached_input_price"),
+    )
+
+
+def _backfill_messages_sync(messages_path: Path, updated_lines: list[str]) -> None:
+    """Atomically overwrite messages.jsonl with backfilled cost fields."""
+    temp_filepath: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".jsonl.tmp",
+            dir=str(messages_path.parent),
+            delete=False,
+            encoding="utf-8",
+        ) as f:
+            temp_filepath = Path(f.name)
+            for line in updated_lines:
+                f.write(line + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_filepath, str(messages_path))
+    except Exception:
+        if temp_filepath and temp_filepath.exists() and temp_filepath.is_file():
+            temp_filepath.unlink()
+        raise
+
+
+def _compute_request_cost(msg: dict[str, Any], metadata: dict[str, Any]) -> float:
+    """Compute cost for an assistant message from the session's pricing snapshot."""
+    usage = msg["usage"]
+    model_alias = msg.get("model") or _extract_model_alias(metadata)
+    input_price, output_price, cached_price = _extract_snapshot_pricing(
+        metadata, model_alias
+    )
+    return session_token_cost(
+        prompt_tokens=usage.get("prompt_tokens", 0),
+        completion_tokens=usage.get("completion_tokens", 0),
+        cached_tokens=usage.get("cached_tokens", 0),
+        input_price_per_million=input_price,
+        output_price_per_million=output_price,
+        cached_input_price_per_million=cached_price,
+    )
+
+
 def _parse_assistant_usage(
     session_dir: Path,
     session_id: str,
@@ -114,6 +183,10 @@ def _parse_assistant_usage(
 
     Falls back to a single synthetic request from meta.json stats when no
     assistant messages carry usage data (old sessions predating the schema change).
+
+    When assistant messages have usage but no stored cost, computes cost from
+    the session's meta.json pricing snapshot and backfills it in-place so
+    subsequent calls read the stored value directly.
     """
     messages_path = session_dir / MESSAGES_FILENAME
     try:
@@ -122,50 +195,54 @@ def _parse_assistant_usage(
         return []
 
     requests: list[RequestUsage] = []
+    updated_lines: list[str] = []
+    needs_backfill = False
+
     for line in content.split("\n"):
         if not line:
             continue
         try:
             msg = json.loads(line)
         except json.JSONDecodeError:
+            updated_lines.append(line)
             continue
+
         if not isinstance(msg, dict) or msg.get("role") != "assistant":
+            updated_lines.append(line)
             continue
 
         usage = msg.get("usage")
         if not isinstance(usage, dict):
+            updated_lines.append(line)
             continue
 
         model_alias = msg.get("model") or _extract_model_alias(metadata)
-        prompt_tokens = usage.get("prompt_tokens", 0)
-        completion_tokens = usage.get("completion_tokens", 0)
-        cached_tokens = usage.get("cached_tokens", 0)
         stored_cost = msg.get("cost")
         if stored_cost is not None:
             cost = stored_cost
+            updated_lines.append(line)
         else:
-            input_price, output_price, cached_price = _lookup_pricing(
-                pricing_map, model_alias
-            )
-            cost = session_token_cost(
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                cached_tokens=cached_tokens,
-                input_price_per_million=input_price,
-                output_price_per_million=output_price,
-                cached_input_price_per_million=cached_price,
-            )
+            cost = _compute_request_cost(msg, metadata)
+            msg["cost"] = cost
+            needs_backfill = True
+            updated_lines.append(json.dumps(msg, ensure_ascii=False))
         requests.append(
             RequestUsage(
                 session_id=session_id,
                 datetime=msg.get("timestamp") or start_time,
                 model=model_alias or "unknown",
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                cached_tokens=cached_tokens,
+                prompt_tokens=usage.get("prompt_tokens", 0),
+                completion_tokens=usage.get("completion_tokens", 0),
+                cached_tokens=usage.get("cached_tokens", 0),
                 cost=cost,
             )
         )
+
+    if needs_backfill:
+        try:
+            _backfill_messages_sync(messages_path, updated_lines)
+        except Exception:
+            pass
 
     if not requests:
         seeded = _seed_from_stats(session_id, start_time, metadata, pricing_map)
