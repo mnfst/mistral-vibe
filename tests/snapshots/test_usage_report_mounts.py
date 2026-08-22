@@ -57,3 +57,20 @@ async def test_render_project_usage_mounts_the_report(
         await app._render_project_usage("/tmp/demo-usage-ui")
         await pilot.pause(0.5)
         assert app.query_one(UsageReport)
+
+
+@pytest.mark.asyncio
+async def test_escape_closes_the_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "vibe.cli.textual_ui.app.aggregate_project_usage",
+        lambda *_args, **_kwargs: ROWS,
+    )
+    app = BaseSnapshotTestApp()
+    async with app.run_test(size=(100, 40)) as pilot:
+        await pilot.pause(0.3)
+        await app._render_project_usage("/tmp/demo-usage-ui")
+        await pilot.pause(0.5)
+        assert app.query(UsageReport)
+        await pilot.press("escape")
+        await pilot.pause(0.5)
+        assert not app.query(UsageReport)
