@@ -164,7 +164,7 @@ def _parse_assistant_usage(
         )
 
     if not requests:
-        seeded = _seed_from_stats(session_id, start_time, metadata)
+        seeded = _seed_from_stats(session_id, start_time, metadata, pricing_map)
         if seeded is not None:
             requests.append(seeded)
 
@@ -172,12 +172,15 @@ def _parse_assistant_usage(
 
 
 def _seed_from_stats(
-    session_id: str, start_time: str | None, metadata: dict[str, Any]
+    session_id: str,
+    start_time: str | None,
+    metadata: dict[str, Any],
+    pricing_map: PricingMap,
 ) -> RequestUsage | None:
     """Synthesize a single request from meta.json cumulative stats.
 
     Used as a fallback for old sessions whose messages.jsonl predates the
-    usage/model/timestamp schema change. The session's stats and stored
+    usage/model/timestamp schema change. The session's stats and live config
     pricing produce one aggregate request row.
     """
     stats = metadata.get("stats")
@@ -191,9 +194,7 @@ def _seed_from_stats(
         return None
 
     model_alias = _extract_model_alias(metadata)
-    input_price, output_price, cached_price = _lookup_model_pricing(
-        metadata, model_alias
-    )
+    input_price, output_price, cached_price = _lookup_pricing(pricing_map, model_alias)
     cost = session_token_cost(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
