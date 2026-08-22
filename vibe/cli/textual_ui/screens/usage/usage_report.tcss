@@ -3,7 +3,7 @@ $mistral_orange: #FF8205;
 
 /* Inline block in the chat stream, framed like the other inline apps. Background stays
    transparent so the terminal shows through. */
-UsageReport {
+#usagereport-app {
     width: 100%;
     height: auto;
     background: transparent;

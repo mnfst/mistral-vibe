@@ -52,17 +52,32 @@ def colour_for(index: int, dark: bool = True) -> str:
     return base if dark else _darken(base, LIGHT_FACTOR)
 
 
-def bar_layout(days: int, width: int) -> tuple[int, int]:
-    """Bar width and gap for `days` columns inside `width` cells.
+def group_size(days: int, width: int) -> int:
+    """Days per bar, so every bar keeps at least one cell of gap beside it.
 
-    Wide bars when there is room, one cell per day when there is not.
+    Forty-five daily bars do not fit in eighty cells with gaps, and bars that touch
+    read as one filled area rather than as separate days. Grouping adjacent days is
+    the honest way to keep them apart.
     """
     if days <= 0:
-        return 1, 0
-    for bar, gap in ((6, 2), (4, 2), (3, 1), (2, 1), (2, 0), (1, 1)):
-        if days * (bar + gap) - gap <= width:
+        return 1
+    size = 1
+    while size < days and days // size * 2 - 1 > width:
+        size += 1
+    return size
+
+
+def bar_layout(bars: int, width: int) -> tuple[int, int]:
+    """Bar width and gap for `bars` columns inside `width` cells.
+
+    Every option keeps a gap: bars that touch stop reading as separate days.
+    """
+    if bars <= 0:
+        return 1, 1
+    for bar, gap in ((6, 2), (4, 2), (3, 1), (2, 1), (1, 1)):
+        if bars * (bar + gap) - gap <= width:
             return bar, gap
-    return 1, 0
+    return 1, 1
 
 
 def _column_bands(
@@ -96,6 +111,11 @@ def render_chart(
     if not series or not series[0].values:
         return [""] * cells_h
 
+    grouped = [
+        Series(label=s.label, values=_group(s.values, group_size(len(s.values), cells_w)))
+        for s in series
+    ]
+    series = grouped
     days = len(series[0].values)
     vmax = max((v for s in series for v in s.values), default=Decimal(0))
     bar, gap = bar_layout(days, cells_w)
@@ -131,10 +151,19 @@ def render_chart(
     return lines
 
 
+def _group(values: list[Decimal], size: int) -> list[Decimal]:
+    if size <= 1:
+        return values
+    return [
+        sum(values[i : i + size], Decimal(0)) for i in range(0, len(values), size)
+    ]
+
+
 def chart_width(days: int, cells_w: int) -> int:
     """Cells the bars actually occupy, so the axis labels line up with them."""
-    bar, gap = bar_layout(days, cells_w)
-    return max(0, days * (bar + gap) - gap)
+    bars = -(-days // group_size(days, cells_w))
+    bar, gap = bar_layout(bars, cells_w)
+    return max(0, bars * (bar + gap) - gap)
 
 
 def axis_labels(vmax: Decimal, rows: int) -> list[str]:
