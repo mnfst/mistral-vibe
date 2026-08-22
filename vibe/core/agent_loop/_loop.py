@@ -184,6 +184,7 @@ from vibe.core.utils import (
     RetryReason,
     get_user_cancellation_message,
     is_user_cancellation_event,
+    utc_now,
 )
 from vibe.observability.logging import log_model_call_success, logger
 from vibe.setup.auth.whoami import WhoAmICache
@@ -2651,7 +2652,15 @@ class AgentLoop(AgentLoopHooksMixin):  # noqa: PLR0904
             tool_choice=self.format_handler.get_tool_choice(),
             call_type=call_type,
         )
-        self.messages.append(result.message)
+        self.messages.append(
+            result.message.model_copy(
+                update={
+                    "usage": result.usage,
+                    "model": active_model.alias,
+                    "timestamp": utc_now().isoformat(),
+                }
+            )
+        )
         if result.stop and result.stop.is_refusal:
             raise _refusal_error(provider.name, active_model.name, result)
         _usage = result.usage
@@ -2737,7 +2746,15 @@ class AgentLoop(AgentLoopHooksMixin):  # noqa: PLR0904
                 )
             self._update_stats(usage=usage, time_seconds=end_time - start_time)
 
-            self.messages.append(chunk_agg.message)
+            self.messages.append(
+                chunk_agg.message.model_copy(
+                    update={
+                        "usage": chunk_agg.usage,
+                        "model": active_model.alias,
+                        "timestamp": utc_now().isoformat(),
+                    }
+                )
+            )
             if chunk_agg.stop and chunk_agg.stop.is_refusal:
                 raise _refusal_error(provider.name, active_model.name, chunk_agg)
 
