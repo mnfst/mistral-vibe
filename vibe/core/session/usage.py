@@ -108,7 +108,11 @@ def _lookup_model_pricing(
 def _parse_assistant_usage(
     session_dir: Path, session_id: str, start_time: str | None, metadata: dict[str, Any]
 ) -> list[RequestUsage]:
-    """Parse messages.jsonl and extract per-request usage from assistant messages."""
+    """Parse messages.jsonl and extract per-request usage from assistant messages.
+
+    Falls back to a single synthetic request from meta.json stats when no
+    assistant messages carry usage data (old sessions predating the schema change).
+    """
     messages_path = session_dir / MESSAGES_FILENAME
     try:
         content = read_safe(messages_path).text
@@ -156,7 +160,55 @@ def _parse_assistant_usage(
                 cost=cost,
             )
         )
+
+    if not requests:
+        seeded = _seed_from_stats(session_id, start_time, metadata)
+        if seeded is not None:
+            requests.append(seeded)
+
     return requests
+
+
+def _seed_from_stats(
+    session_id: str, start_time: str | None, metadata: dict[str, Any]
+) -> RequestUsage | None:
+    """Synthesize a single request from meta.json cumulative stats.
+
+    Used as a fallback for old sessions whose messages.jsonl predates the
+    usage/model/timestamp schema change. The session's stats and stored
+    pricing produce one aggregate request row.
+    """
+    stats = metadata.get("stats")
+    if not isinstance(stats, dict):
+        return None
+
+    prompt_tokens = stats.get("session_prompt_tokens", 0)
+    completion_tokens = stats.get("session_completion_tokens", 0)
+    cached_tokens = stats.get("session_cached_tokens", 0)
+    if prompt_tokens == 0 and completion_tokens == 0:
+        return None
+
+    model_alias = _extract_model_alias(metadata)
+    input_price, output_price, cached_price = _lookup_model_pricing(
+        metadata, model_alias
+    )
+    cost = session_token_cost(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        cached_tokens=cached_tokens,
+        input_price_per_million=input_price,
+        output_price_per_million=output_price,
+        cached_input_price_per_million=cached_price,
+    )
+    return RequestUsage(
+        session_id=session_id,
+        datetime=start_time,
+        model=model_alias or "unknown",
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        cached_tokens=cached_tokens,
+        cost=cost,
+    )
 
 
 def _find_child_session_dirs(session_dir: Path) -> list[Path]:
