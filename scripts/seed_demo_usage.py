@@ -35,7 +35,6 @@ MODELS = [
 ]
 
 PROJECTS = [
-    {"cwd": "/tmp/seeded-project", "days": 45},
     {"cwd": "/tmp/coca-cola", "days": 30},
     {"cwd": "/tmp/nike", "days": 60},
 ]
