@@ -1,0 +1,25 @@
+vibe/cli/textual_ui/app.py
+  h_4314c622e2d856 193,253-254,359,3415-3497
+vibe/cli/commands.py
+  h_4314c622e2d856 231-236
+vibe/core/types.py
+  h_4314c622e2d856 342-343,377-378,449-450
+vibe/core/agent_loop/_loop.py
+  h_4314c622e2d856 2654-2658,2744-2748
+vibe/cli/textual_ui/widgets/project_picker.py
+  h_4314c622e2d856 1-2,4-19,21-76
+  h_4314c622e2d856 3,20
+vibe/core/session/usage.py
+  h_4314c622e2d856 1-283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "d24fa4fc6f7c854f3930a561a2eff4575bc1e42d",
+  "prompts": {},
+  "humans": {
+    "h_4314c622e2d856": {
+      "author": "Guillaume Gay <guillaume.gay@protonmail.com>"
+    }
+  }
+}
