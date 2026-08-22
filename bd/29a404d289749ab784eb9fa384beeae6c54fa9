@@ -1,0 +1,14 @@
+scripts/seed_demo_usage.py
+  h_4314c622e2d856 2,6-8,25,37-42,263-266,268-269,274,295,297-298,316,331,338-357
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "bd29a404d289749ab784eb9fa384beeae6c54fa9",
+  "prompts": {},
+  "humans": {
+    "h_4314c622e2d856": {
+      "author": "Guillaume Gay <guillaume.gay@protonmail.com>"
+    }
+  }
+}
