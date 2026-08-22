@@ -17,7 +17,6 @@ from typing import Any, ClassVar
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
-from textual.message import Message
 from textual.content import Content
 from textual.widgets import Static
 
@@ -28,6 +27,7 @@ from vibe.cli.textual_ui.screens.usage.chart import (
     axis_labels,
     chart_width,
     colour_for,
+    group_size,
     render_chart,
 )
 from vibe.cli.textual_ui.screens.usage.formatting import (
@@ -42,15 +42,11 @@ from vibe.cli.textual_ui.screens.usage.view_model import (
     Period,
     ProjectUsage,
     RequestLike,
-    SessionBucket,
     bucket,
 )
 
 CHART_ROWS = 5
 CHART_MIN_COLS = 24
-SESSION_ID_WIDTH = 8
-# An inline block must not run for pages. Beyond this the tail is summarised.
-MAX_SESSION_ROWS = 8
 
 _STYLES = (Path(__file__).parent / "usage_report.tcss").read_text()
 
@@ -83,13 +79,9 @@ class UsageReport(Vertical):
     DEFAULT_CSS = _STYLES
     can_focus = True
 
-    class Cancelled(Message):
-        """Escape: hand the bottom of the screen back to the prompt."""
-
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("left,h", "previous_period", "Previous period", show=False),
         Binding("right,l", "next_period", "Next period", show=False),
-        Binding("escape", "release_focus", "Back to prompt", show=False),
     ]
 
     def __init__(
@@ -99,7 +91,9 @@ class UsageReport(Vertical):
         today: date | None = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(**kwargs)
+        # _switch_to_input_app removes bottom apps by id, built from the BottomApp
+        # member value. Without this id the report survives escape.
+        super().__init__(id="usagereport-app", **kwargs)
         self._cwd = cwd
         self._requests = requests
         self._today = today or date.today()
@@ -174,6 +168,7 @@ class UsageReport(Vertical):
         if usage.days:
             yield Static(
                 Content.from_markup("[$text-muted]Cost per day[/]"),
+                id="chart-title",
                 classes="usage-section",
             )
             with Horizontal(classes="chart-row") as row:
@@ -206,21 +201,6 @@ class UsageReport(Vertical):
         for index, model in enumerate(usage.models):
             yield from self._model_rows(model, usage.total, index)
 
-        shown = usage.sessions[:MAX_SESSION_ROWS]
-        yield Static(
-            Content.from_markup(
-                f"[$text-muted]{_plural(len(usage.sessions), 'session')}[/]"
-            ),
-            classes="usage-section",
-        )
-        for session in shown:
-            yield self._session_row(session)
-        hidden = len(usage.sessions) - len(shown)
-        if hidden > 0:
-            yield Static(
-                Content.from_markup(f"[$text-muted]and {hidden} more[/]"),
-                classes="session-row",
-            )
 
     def _model_rows(
         self, model: ModelBucket, total: Decimal, index: int
@@ -251,17 +231,6 @@ class UsageReport(Vertical):
             classes="model-meta",
         )
 
-    def _session_row(self, session: SessionBucket) -> Static:
-        started = short_day(session.started) if session.started else "—"
-        return Static(
-            Content.from_markup(
-                f"[$text-muted]{session.session_id[:SESSION_ID_WIDTH]}  "
-                f"{started:>7}  {session.requests:>4} req[/]  "
-                f"[$foreground]{money(session.cost):>9}[/]"
-            ),
-            classes="session-row",
-        )
-
     # -- chart -----------------------------------------------------------------
 
     def on_mount(self) -> None:
@@ -279,9 +248,6 @@ class UsageReport(Vertical):
         index = (PERIODS.index(self._period) + delta) % len(PERIODS)
         self.set_period(PERIODS[index])
 
-    def action_release_focus(self) -> None:
-        self.post_message(self.Cancelled())
-
     def on_resize(self) -> None:
         self._draw_chart()
 
@@ -294,6 +260,7 @@ class UsageReport(Vertical):
             x_mid = self.query_one("#chart-x-mid", Static)
             x_last = self.query_one("#chart-x-last", Static)
             x_tail = self.query_one("#chart-x-tail", Static)
+            title = self.query_one("#chart-title", Static)
         except Exception:
             return
 
@@ -326,6 +293,15 @@ class UsageReport(Vertical):
         # The bar grid rarely fills the plot exactly; pad the axis row so the last
         # label sits under the last bar rather than at the far edge.
         x_tail.styles.width = max(0, cols - used)
+        # A wide range groups days so the bars keep a gap; say what one bar covers.
+        size = group_size(len(usage.days), cols)
+        title.update(
+            Content.from_markup(
+                "[$text-muted]Cost per day[/]"
+                if size == 1
+                else f"[$text-muted]Cost per {size} days[/]"
+            )
+        )
 
 
 def _x_labels(days: list[date]) -> tuple[str, str, str]:

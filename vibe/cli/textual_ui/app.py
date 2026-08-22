@@ -3446,11 +3446,6 @@ class VibeApp(App):  # noqa: PLR0904
         await self._switch_to_input_app()
         await self._render_project_usage(message.cwd)
 
-    async def on_usage_report_cancelled(
-        self, message: UsageReport.Cancelled
-    ) -> None:
-        await self._switch_to_input_app()
-
     async def on_project_picker_app_cancelled(
         self, message: ProjectPickerApp.Cancelled
     ) -> None:
@@ -4596,6 +4591,14 @@ class VibeApp(App):  # noqa: PLR0904
             pass
         self._last_escape_time = None
 
+    def _handle_project_picker_app_escape(self) -> None:
+        self.call_next(self._switch_to_input_app)
+        self._last_escape_time = None
+
+    def _handle_usage_report_escape(self) -> None:
+        self.call_next(self._switch_to_input_app)
+        self._last_escape_time = None
+
     def _try_interrupt_bottom_app_escape(self) -> bool:
         handlers = {
             BottomApp.Voice: self._handle_voice_app_escape,
@@ -4622,6 +4625,8 @@ class VibeApp(App):  # noqa: PLR0904
                 self._handle_vibe_code_project_picker_app_escape
             ),
             BottomApp.SessionPicker: self._handle_session_picker_app_escape,
+            BottomApp.ProjectPicker: self._handle_project_picker_app_escape,
+            BottomApp.UsageReport: self._handle_usage_report_escape,
         }
 
         if handler := handlers.get(self._current_bottom_app):
