@@ -228,6 +228,12 @@ class CommandRegistry:
                 handler="_show_theme",
                 side_channel=True,
             ),
+            "projects": Command(
+                aliases=frozenset(["/projects", "/usage"]),
+                description="Browse per-project token usage and cost across all sessions",
+                handler="_show_projects",
+                side_channel=True,
+            ),
         }
 
     @property

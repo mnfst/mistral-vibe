@@ -339,6 +339,9 @@ class LLMMessage(BaseModel):
     resources: list[UserResource] | None = None
     manual_shell: ManualShellContext | None = None
     context_boundary: Literal["compaction"] | None = None
+    usage: LLMUsage | None = None
+    model: str | None = None
+    timestamp: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -372,6 +375,9 @@ class LLMMessage(BaseModel):
             "resources": getattr(v, "resources", None),
             "manual_shell": getattr(v, "manual_shell", None),
             "context_boundary": getattr(v, "context_boundary", None),
+            "usage": getattr(v, "usage", None),
+            "model": getattr(v, "model", None),
+            "timestamp": getattr(v, "timestamp", None),
         }
 
     def __add__(self, other: LLMMessage) -> LLMMessage:
@@ -442,6 +448,9 @@ class LLMMessage(BaseModel):
             ),
             resources=self.resources if self.resources is not None else other.resources,
             context_boundary=self.context_boundary or other.context_boundary,
+            usage=other.usage or self.usage,
+            model=other.model or self.model,
+            timestamp=other.timestamp or self.timestamp,
         )
 
 

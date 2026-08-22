@@ -190,6 +190,7 @@ from vibe.cli.textual_ui.widgets.model_picker import ModelOption, ModelPickerApp
 from vibe.cli.textual_ui.widgets.narrator_status import NarratorStatus
 from vibe.cli.textual_ui.widgets.no_markup_static import NoMarkupStatic
 from vibe.cli.textual_ui.widgets.path_display import PathDisplay
+from vibe.cli.textual_ui.widgets.project_picker import ProjectPickerApp
 from vibe.cli.textual_ui.widgets.proxy_setup_app import ProxySetupApp
 from vibe.cli.textual_ui.widgets.question_app import QuestionApp
 from vibe.cli.textual_ui.widgets.rewind_app import RewindApp
@@ -249,6 +250,8 @@ from vibe.cli.vscode_extension_promo import (
     should_show_promo,
 )
 from vibe.config_values import FALLBACK_THEME
+from vibe.core.paths._vibe_home import SESSION_LOG_DIR
+from vibe.core.session.usage import aggregate_project_usage, list_projects
 from vibe.observability.logging import (
     get_log_level_chain,
     logger,
@@ -353,6 +356,7 @@ class BottomApp(StrEnum):
     VibeCodeProjectPicker = auto()
     VibeCodeProjectCreate = auto()
     SessionPicker = auto()
+    ProjectPicker = auto()
     Voice = auto()
 
 
@@ -3407,6 +3411,76 @@ class VibeApp(App):  # noqa: PLR0904
 
     async def _show_data_retention(self, **kwargs: Any) -> None:
         await self._mount_and_scroll(UserCommandMessage(DATA_RETENTION_MESSAGE))
+
+    async def _show_projects(self, **kwargs: Any) -> None:
+        session_log = self.app_server.resources.runtime.session_log
+        if not session_log.enabled:
+            await self._mount_and_scroll(
+                ErrorMessage(
+                    "Session logging is disabled in configuration.",
+                    collapsed=self._tools_collapsed,
+                )
+            )
+            return
+
+        save_dir = (
+            Path(session_log.path).parent
+            if session_log.persisted and session_log.path
+            else SESSION_LOG_DIR.path
+        )
+        projects = await asyncio.to_thread(list_projects, save_dir)
+        if not projects:
+            await self._mount_and_scroll(
+                UserCommandMessage("No projects found with saved sessions.")
+            )
+            return
+
+        picker = ProjectPickerApp(projects=[(p.cwd, p.session_count) for p in projects])
+        await self._switch_from_input(picker)
+
+    async def on_project_picker_app_project_selected(
+        self, message: ProjectPickerApp.ProjectSelected
+    ) -> None:
+        await self._switch_to_input_app()
+        await self._render_project_usage(message.cwd)
+
+    async def on_project_picker_app_cancelled(
+        self, message: ProjectPickerApp.Cancelled
+    ) -> None:
+        await self._switch_to_input_app()
+
+    async def _render_project_usage(self, cwd: str) -> None:
+        session_log = self.app_server.resources.runtime.session_log
+        save_dir = (
+            Path(session_log.path).parent
+            if session_log.persisted and session_log.path
+            else SESSION_LOG_DIR.path
+        )
+        requests = await asyncio.to_thread(aggregate_project_usage, save_dir, cwd)
+        if not requests:
+            await self._mount_and_scroll(
+                UserCommandMessage(f"No requests found for `{cwd}`.")
+            )
+            return
+
+        total_prompt = sum(r.prompt_tokens for r in requests)
+        total_cached = sum(r.cached_tokens for r in requests)
+        total_output = sum(r.completion_tokens for r in requests)
+        total_cost = sum(r.cost for r in requests)
+
+        models = sorted({r.model for r in requests})
+        model_label = ", ".join(models)
+
+        text = (
+            f"## Project Usage: `{cwd}`\n\n"
+            f"_Model(s): {model_label}_\n\n"
+            f"**Total cost: ${total_cost:.4f}**\n\n"
+            f"- Requests: {len(requests)}\n"
+            f"- Prompt tokens: {total_prompt:,}"
+            f" ({total_cached:,} cached)\n"
+            f"- Output tokens: {total_output:,}"
+        )
+        await self._mount_and_scroll(UserCommandMessage(text))
 
     async def _rename_session(self, cmd_args: str = "", **kwargs: Any) -> None:
         title = cmd_args.strip()
