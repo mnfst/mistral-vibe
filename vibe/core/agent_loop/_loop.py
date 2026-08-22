@@ -193,6 +193,7 @@ from vibe.utils import VIBE_WARNING_TAG
 from vibe.utils.api_keys import resolve_api_key
 from vibe.utils.cache_store import CacheStore, InMemoryCacheStore
 from vibe.utils.http import get_server_url_from_api_base, get_user_agent
+from vibe.utils.pricing import session_token_cost
 
 
 def _is_git_executable_available() -> bool:
@@ -2658,6 +2659,16 @@ class AgentLoop(AgentLoopHooksMixin):  # noqa: PLR0904
                     "usage": result.usage,
                     "model": active_model.alias,
                     "timestamp": utc_now().isoformat(),
+                    "cost": session_token_cost(
+                        prompt_tokens=result.usage.prompt_tokens if result.usage else 0,
+                        completion_tokens=result.usage.completion_tokens
+                        if result.usage
+                        else 0,
+                        cached_tokens=result.usage.cached_tokens if result.usage else 0,
+                        input_price_per_million=active_model.input_price,
+                        output_price_per_million=active_model.output_price,
+                        cached_input_price_per_million=active_model.cached_input_price,
+                    ),
                 }
             )
         )
@@ -2752,6 +2763,14 @@ class AgentLoop(AgentLoopHooksMixin):  # noqa: PLR0904
                         "usage": chunk_agg.usage,
                         "model": active_model.alias,
                         "timestamp": utc_now().isoformat(),
+                        "cost": session_token_cost(
+                            prompt_tokens=usage.prompt_tokens if usage else 0,
+                            completion_tokens=usage.completion_tokens if usage else 0,
+                            cached_tokens=usage.cached_tokens if usage else 0,
+                            input_price_per_million=active_model.input_price,
+                            output_price_per_million=active_model.output_price,
+                            cached_input_price_per_million=active_model.cached_input_price,
+                        ),
                     }
                 )
             )

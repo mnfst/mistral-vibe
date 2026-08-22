@@ -137,20 +137,24 @@ def _parse_assistant_usage(
             continue
 
         model_alias = msg.get("model") or _extract_model_alias(metadata)
-        input_price, output_price, cached_price = _lookup_pricing(
-            pricing_map, model_alias
-        )
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
         cached_tokens = usage.get("cached_tokens", 0)
-        cost = session_token_cost(
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            cached_tokens=cached_tokens,
-            input_price_per_million=input_price,
-            output_price_per_million=output_price,
-            cached_input_price_per_million=cached_price,
-        )
+        stored_cost = msg.get("cost")
+        if stored_cost is not None:
+            cost = stored_cost
+        else:
+            input_price, output_price, cached_price = _lookup_pricing(
+                pricing_map, model_alias
+            )
+            cost = session_token_cost(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cached_tokens=cached_tokens,
+                input_price_per_million=input_price,
+                output_price_per_million=output_price,
+                cached_input_price_per_million=cached_price,
+            )
         requests.append(
             RequestUsage(
                 session_id=session_id,

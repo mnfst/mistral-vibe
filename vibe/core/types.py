@@ -342,6 +342,7 @@ class LLMMessage(BaseModel):
     usage: LLMUsage | None = None
     model: str | None = None
     timestamp: str | None = None
+    cost: float | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -378,6 +379,7 @@ class LLMMessage(BaseModel):
             "usage": getattr(v, "usage", None),
             "model": getattr(v, "model", None),
             "timestamp": getattr(v, "timestamp", None),
+            "cost": getattr(v, "cost", None),
         }
 
     def __add__(self, other: LLMMessage) -> LLMMessage:
@@ -451,6 +453,7 @@ class LLMMessage(BaseModel):
             usage=other.usage or self.usage,
             model=other.model or self.model,
             timestamp=other.timestamp or self.timestamp,
+            cost=other.cost if other.cost is not None else self.cost,
         )
 
 
